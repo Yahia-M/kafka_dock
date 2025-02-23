@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - ./kafka_data:/var/lib/kafka/data
+
+  ngrok:
+    image: wernight/ngrok:latest
+    container_name: ngrok
+    depends_on:
+      - kafka
+    ports:
+      - "4040:4040"
+    environment:
+      NGROK_AUTHTOKEN: 1n76FUumd6izNoyPXqq5DFZcCw8_4NDTBxaXbgfGwyEEh6oiF  # Replace with your ngrok auth token
+    command: ngrok tcp kafka:9092 --log=stdout
+
+  producer:
+    image: python:3.12-slim
+    container_name: producer
+    depends_on:
+      - kafka
+    volumes:
+      - ./producer:/app  # Mount ./producer to /app
+    working_dir: /app
+    environment:
+      MONGO_URI: "mongodb+srv://dbGDR:dbYahiaUsers@cluster-gdr.yogka.mongodb.net/?retryWrites=true&w=majority&appName=Cluster-GDR"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: my_topic
+    command: >
+      sh -c "pip install --upgrade pip && pip install pymongo kafka-python &&
+             python producer.py"
+
+  consumer:
+    image: python:3.12-slim
+    container_name: consumer
+    depends_on:
+      - kafka
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./consumer:/app
+    working_dir: /app
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: my_topic
+    command: >
+      sh -c "pip install --upgrade pip && pip install kafka-python flask &&
+             python consumer.py"
